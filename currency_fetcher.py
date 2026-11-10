@@ -19,7 +19,9 @@ def get_currencies(currencies_ids_lst: list) -> list:
             valute_cur_name, valute_cur_val = _v.find('Name').text, _v.find(
                 'Value').text
             valute_charcode = _v.find('CharCode').text
-            valute[valute_charcode] = (valute_cur_name, valute_cur_val)
+            # новое: целая и дробная части курса — отдельно
+            valute_int, valute_frac = valute_cur_val.split(',')
+            valute[valute_charcode] = (valute_cur_name, (valute_int, valute_frac))
             result.append(valute)
 
     return result
@@ -30,12 +32,13 @@ class CurrenciesLst():
     def __init__(self, currencies_ids_lst=None):
         # новый атрибут для входных параметров
         self.__currencies_ids_lst = list(currencies_ids_lst or [])
+        # значения хранятся отдельно: целая и дробная часть курса
         self.__cur_lst = [{
-            'GBP': ('Фунт стерлингов Соединенного королевства', '113,2069')
+            'GBP': ('Фунт стерлингов Соединенного королевства', ('113', '2069'))
         }, {
-            'KZT': ('Казахстанских тенге', '19,8264')
+            'KZT': ('Казахстанских тенге', ('19', '8264'))
         }, {
-            'TRY': ('Турецких лир', '33,1224')
+            'TRY': ('Турецких лир', ('33', '1224'))
         }]
 
     def __del__(self):
