@@ -1,4 +1,4 @@
-def get_currencies(currencies_ids_lst: list) -> list:
+def get_currencies(currencies_ids_lst: list[str]) -> list[dict]:
     import requests
     from xml.etree import ElementTree as ET  # TODO 1: Исследовать самостоятельно есть ли более оптимальная библиотека для парсинга XML или
 
@@ -21,7 +21,11 @@ def get_currencies(currencies_ids_lst: list) -> list:
             valute_charcode = _v.find('CharCode').text
             # новое: целая и дробная части курса — отдельно
             valute_int, valute_frac = valute_cur_val.split(',')
-            valute[valute_charcode] = (valute_cur_name, (valute_int, valute_frac))
+            # новое: номинал валюты (если не 1 — сохраняем)
+            valute_nominal = _v.find('Nominal').text
+            valute[valute_charcode] = (
+                valute_cur_name, (valute_int, valute_frac), valute_nominal
+            )
             result.append(valute)
 
     return result
@@ -32,13 +36,13 @@ class CurrenciesLst():
     def __init__(self, currencies_ids_lst=None):
         # новый атрибут для входных параметров
         self.__currencies_ids_lst = list(currencies_ids_lst or [])
-        # значения хранятся отдельно: целая и дробная часть курса
+        # значения хранятся отдельно: целая и дробная часть курса + номинал
         self.__cur_lst = [{
-            'GBP': ('Фунт стерлингов Соединенного королевства', ('113', '2069'))
+            'GBP': ('Фунт стерлингов Соединенного королевства', ('113', '2069'), '1')
         }, {
-            'KZT': ('Казахстанских тенге', ('19', '8264'))
+            'KZT': ('Казахстанских тенге', ('19', '8264'), '100')
         }, {
-            'TRY': ('Турецких лир', ('33', '1224'))
+            'TRY': ('Турецких лир', ('33', '1224'), '10')
         }]
 
     def __del__(self):
