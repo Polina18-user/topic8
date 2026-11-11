@@ -15,6 +15,9 @@ def get_currencies(currencies_ids_lst: list) -> list:
         "Valute"
     )  # исследовать, есть ли отдельный метод получения валют с опреденным id
     # если да, упростить алгоритм ниже
+
+    found_ids = set() # какие ID реально нашли в XML
+
     for _v in valutes:
         valute_id = _v.get('ID')
         valute = {}
@@ -28,6 +31,12 @@ def get_currencies(currencies_ids_lst: list) -> list:
                 valute_cur_name, (valute_int, valute_frac), valute_nominal
             )
             result.append(valute)
+            found_ids.add(str(valute_id))
+
+    # новое: для ID, которых нет в XML, кладём None
+    for cid in currencies_ids_lst:
+        if str(cid) not in found_ids:
+            result.append({str(cid): None})
 
     return result
 
@@ -91,8 +100,6 @@ class CurrenciesLst():
     # ---------- метод получения валюты с контролем частоты ----------
     def get_currencies(self):
         now = time.monotonic()
-        # если с прошлого запроса прошло меньше min_interval_sec —
-        # запрос НЕ отправляем, возвращаем кешированный результат
         if (self.__last_request_time is not None
                 and now - self.__last_request_time < self.__min_interval_sec):
             print(f"[CurrenciesLst] слишком часто: прошло "
@@ -101,7 +108,7 @@ class CurrenciesLst():
             return self.__cur_lst
 
         self.__cur_lst = get_currencies(self.__currencies_ids_lst)
-        self.__last_request_time = time.monotonic()  # фиксируем время запроса
+        self.__last_request_time = time.monotonic()
         return self.__cur_lst
 
     def visualize_currencies(self):
@@ -132,6 +139,18 @@ class CurrenciesLst():
 
 
 if __name__ == '__main__':
+
     res = get_currencies(['R01035', 'R01335', 'R01700J'])
     if res:
         print(get_currencies(['R01035', 'R01335', 'R01700J']))
+
+    # новое: демонстрация обработки неправильного ID
+    print(get_currencies(['R9999']))        # [{'R9999': None}]
+    print(get_currencies(['R01035', 'R9999']))  # [{'GBP': (...)}, {'R9999': None}]
+
+    # демонстрация контроля частоты запросов
+    cl = CurrenciesLst(['R01035'], min_interval_sec=1.0)
+    print(cl.get_currencies())   # 1-й вызов — реальный запрос
+    print(cl.get_currencies())   # 2-й сразу — слишком часто, кеш
+    time.sleep(1.1)
+    print(cl.get_currencies())   # прошла 1 с — снова реальный запрос
