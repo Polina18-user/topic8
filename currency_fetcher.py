@@ -3,20 +3,15 @@ import time
 
 def get_currencies(currencies_ids_lst: list) -> list:
     import requests
-    from xml.etree import ElementTree as ET  # TODO 1: Исследовать самостоятельно есть ли более оптимальная библиотека для парсинга XML или
-
-    # посмотреть есть ли возможность использовать у ЦБ другой API для получения json изначально
+    from xml.etree import ElementTree as ET
 
     cur_res_str = requests.get('http://www.cbr.ru/scripts/XML_daily.asp')
     result = []
 
     root = ET.fromstring(cur_res_str.content)
-    valutes = root.findall(
-        "Valute"
-    )  # исследовать, есть ли отдельный метод получения валют с опреденным id
-    # если да, упростить алгоритм ниже
+    valutes = root.findall("Valute")
 
-    found_ids = set() # какие ID реально нашли в XML
+    found_ids = set()
 
     for _v in valutes:
         valute_id = _v.get('ID')
@@ -33,7 +28,6 @@ def get_currencies(currencies_ids_lst: list) -> list:
             result.append(valute)
             found_ids.add(str(valute_id))
 
-    # новое: для ID, которых нет в XML, кладём None
     for cid in currencies_ids_lst:
         if str(cid) not in found_ids:
             result.append({str(cid): None})
@@ -44,13 +38,9 @@ def get_currencies(currencies_ids_lst: list) -> list:
 class CurrenciesLst():
 
     def __init__(self, currencies_ids_lst=None, min_interval_sec=1.0):
-        # новый атрибут для входных параметров
         self.__currencies_ids_lst = list(currencies_ids_lst or [])
-        # новое: минимальный интервал между запросами (сек)
         self.__min_interval_sec = float(min_interval_sec)
-        # новое: время последнего фактического запроса к ЦБ
         self.__last_request_time = None
-        # значения хранятся отдельно: целая и дробная часть курса + номинал
         self.__cur_lst = [{
             'GBP': ('Фунт стерлингов Соединенного королевства', ('113', '2069'), '1')
         }, {
@@ -60,10 +50,8 @@ class CurrenciesLst():
         }]
 
     def __del__(self):
-        # деструктор для атрибутов (по требованию задания)
         print(f"[CurrenciesLst] уничтожен объект id={id(self)}")
 
-    # ---------- геттер и сеттер входных параметров ----------
     @property
     def currencies_ids_lst(self):
         return self.__currencies_ids_lst
@@ -74,7 +62,6 @@ class CurrenciesLst():
             raise TypeError("currencies_ids_lst должен быть списком")
         self.__currencies_ids_lst = [str(x) for x in value]
 
-    # ---------- геттер и сеттер результата ----------
     @property
     def cur_lst(self):
         return self.__cur_lst
@@ -85,7 +72,6 @@ class CurrenciesLst():
             raise TypeError("cur_lst должен быть списком")
         self.__cur_lst = value
 
-    # ---------- геттер и сеттер интервала ----------
     @property
     def min_interval_sec(self):
         return self.__min_interval_sec
@@ -97,7 +83,6 @@ class CurrenciesLst():
             raise ValueError("min_interval_sec не может быть отрицательным")
         self.__min_interval_sec = value
 
-    # ---------- метод получения валюты с контролем частоты ----------
     def get_currencies(self):
         now = time.monotonic()
         if (self.__last_request_time is not None
@@ -111,31 +96,42 @@ class CurrenciesLst():
         self.__last_request_time = time.monotonic()
         return self.__cur_lst
 
-    def visualize_currencies(self):
+    def visualize_currencies(self, filename='currencies.jpg'):
+        """Получает курсы валют (если их нет) и строит график в filename."""
+        if not self.__cur_lst:
+            self.get_currencies()
+
+        labels = []
+        values = []
+        for item in self.__cur_lst:
+            for code, data in item.items():
+                if data is None:
+                    continue
+                name, (int_part, frac_part), nominal = data
+                rate = float(f'{int_part}.{frac_part}') / float(nominal)
+                labels.append(code)
+                values.append(rate)
+
+        if not labels:
+            print('Нет данных для визуализации — сначала вызовите get_currencies()')
+            return None
+
+        import matplotlib
+        matplotlib.use('Agg')
         import matplotlib.pyplot as plt
 
-        fig, ax = plt.subplots()
-        currencies = []
-        for el in self.__cur_lst:
-            currencies.append(str(el.keys()))
+        fig, ax = plt.subplots(figsize=(8, 5))
+        bars = ax.bar(labels, values, color='steelblue')
+        ax.set_xlabel('Валюта')
+        ax.set_ylabel('Курс, руб. за 1 единицу')
+        ax.set_title('Курсы валют ЦБ РФ')
+        ax.bar_label(bars, fmt='%.2f', padding=3)
+        fig.tight_layout()
 
-        print(currencies)
-        # fruits = ['apple', 'blueberry', 'cherry', 'orange']
-        # counts = [40, 100, 30, 55]
-        # bar_labels = ['red', 'blue', '_red', 'orange']
-        # bar_colors = ['tab:red', 'tab:blue', 'tab:red', 'tab:orange']
-
-        # ax.bar(fruits, counts, label=bar_labels, color=bar_colors)
-
-        # ax.set_ylabel('fruit supply')
-        # ax.set_title('Fruit supply by kind and color')
-        # ax.legend(title='Fruit color')
-
-        # plt.show()
-
-        # обращается к атрибуту __cur_lst, преобразовывать значения курсов валют в нужный формат и выводить эти данные в файл
-
-        # self.__cur_lst
+        fig.savefig(filename, dpi=150)
+        plt.close(fig)
+        print(f'График сохранён в {filename}')
+        return filename
 
 
 if __name__ == '__main__':
@@ -144,13 +140,14 @@ if __name__ == '__main__':
     if res:
         print(get_currencies(['R01035', 'R01335', 'R01700J']))
 
-    # новое: демонстрация обработки неправильного ID
-    print(get_currencies(['R9999']))        # [{'R9999': None}]
-    print(get_currencies(['R01035', 'R9999']))  # [{'GBP': (...)}, {'R9999': None}]
+    print(get_currencies(['R9999']))
+    print(get_currencies(['R01035', 'R9999']))
 
-    # демонстрация контроля частоты запросов
     cl = CurrenciesLst(['R01035'], min_interval_sec=1.0)
-    print(cl.get_currencies())   # 1-й вызов — реальный запрос
-    print(cl.get_currencies())   # 2-й сразу — слишком часто, кеш
+    print(cl.get_currencies())
+    print(cl.get_currencies())
     time.sleep(1.1)
-    print(cl.get_currencies())   # прошла 1 с — снова реальный запрос
+    print(cl.get_currencies())
+
+    cl_viz = CurrenciesLst(['R01035', 'R01335', 'R01700J'])
+    cl_viz.visualize_currencies('currencies.jpg')
