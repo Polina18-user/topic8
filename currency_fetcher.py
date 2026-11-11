@@ -1,4 +1,7 @@
-def get_currencies(currencies_ids_lst: list[str]) -> list[dict]:
+import time
+
+
+def get_currencies(currencies_ids_lst: list) -> list:
     import requests
     from xml.etree import ElementTree as ET  # TODO 1: Исследовать самостоятельно есть ли более оптимальная библиотека для парсинга XML или
 
@@ -19,9 +22,7 @@ def get_currencies(currencies_ids_lst: list[str]) -> list[dict]:
             valute_cur_name, valute_cur_val = _v.find('Name').text, _v.find(
                 'Value').text
             valute_charcode = _v.find('CharCode').text
-            # новое: целая и дробная части курса — отдельно
             valute_int, valute_frac = valute_cur_val.split(',')
-            # новое: номинал валюты (если не 1 — сохраняем)
             valute_nominal = _v.find('Nominal').text
             valute[valute_charcode] = (
                 valute_cur_name, (valute_int, valute_frac), valute_nominal
@@ -33,9 +34,13 @@ def get_currencies(currencies_ids_lst: list[str]) -> list[dict]:
 
 class CurrenciesLst():
 
-    def __init__(self, currencies_ids_lst=None):
+    def __init__(self, currencies_ids_lst=None, min_interval_sec=1.0):
         # новый атрибут для входных параметров
         self.__currencies_ids_lst = list(currencies_ids_lst or [])
+        # новое: минимальный интервал между запросами (сек)
+        self.__min_interval_sec = float(min_interval_sec)
+        # новое: время последнего фактического запроса к ЦБ
+        self.__last_request_time = None
         # значения хранятся отдельно: целая и дробная часть курса + номинал
         self.__cur_lst = [{
             'GBP': ('Фунт стерлингов Соединенного королевства', ('113', '2069'), '1')
@@ -71,9 +76,32 @@ class CurrenciesLst():
             raise TypeError("cur_lst должен быть списком")
         self.__cur_lst = value
 
-    # ---------- метод получения валюты (использует исходную get_currencies) ----------
+    # ---------- геттер и сеттер интервала ----------
+    @property
+    def min_interval_sec(self):
+        return self.__min_interval_sec
+
+    @min_interval_sec.setter
+    def min_interval_sec(self, value):
+        value = float(value)
+        if value < 0:
+            raise ValueError("min_interval_sec не может быть отрицательным")
+        self.__min_interval_sec = value
+
+    # ---------- метод получения валюты с контролем частоты ----------
     def get_currencies(self):
+        now = time.monotonic()
+        # если с прошлого запроса прошло меньше min_interval_sec —
+        # запрос НЕ отправляем, возвращаем кешированный результат
+        if (self.__last_request_time is not None
+                and now - self.__last_request_time < self.__min_interval_sec):
+            print(f"[CurrenciesLst] слишком часто: прошло "
+                  f"{now - self.__last_request_time:.3f} с, "
+                  f"нужно {self.__min_interval_sec} с — возвращаю кеш")
+            return self.__cur_lst
+
         self.__cur_lst = get_currencies(self.__currencies_ids_lst)
+        self.__last_request_time = time.monotonic()  # фиксируем время запроса
         return self.__cur_lst
 
     def visualize_currencies(self):
@@ -104,7 +132,6 @@ class CurrenciesLst():
 
 
 if __name__ == '__main__':
-
     res = get_currencies(['R01035', 'R01335', 'R01700J'])
     if res:
         print(get_currencies(['R01035', 'R01335', 'R01700J']))
